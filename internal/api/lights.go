@@ -13,6 +13,8 @@ type Bridge struct {
 	Username string
 }
 
+// This is the newer Philips Hue light data's structure
+// Older data types are declared in the LightV1 struct
 type Light struct {
 	ID       string `json:"id"`
 	Metadata struct {
