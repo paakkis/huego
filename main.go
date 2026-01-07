@@ -5,22 +5,36 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"huego/internal/api"
 	"huego/internal/bridge"
 	"huego/internal/config"
-	"image/color"
 	"log"
+	"math"
 	"os"
 	"sort"
 )
 
-var lightToggles = map[string]*widget.Clickable{}
+var (
+	lightSliders = map[string]*widget.Float{}
+	sliderInit   = map[string]bool{}
+	title        = "Huegio"
+	MAX_WIDTH    = unit.Dp(400)
+	MAX_HEIGHT   = unit.Dp(300)
+)
+
+type (
+	D = layout.Dimensions
+	C = layout.Context
+)
 
 func main() {
 	go func() {
 		w := new(app.Window)
+		w.Option(app.Title(title))
+		w.Option(app.Size(MAX_WIDTH, MAX_HEIGHT))
 		if err := run(w); err != nil {
 			log.Fatal(err)
 		}
@@ -56,10 +70,9 @@ func run(w *app.Window) error {
 		return err
 	}
 
-	// Ensure a stable Clickable per light ID.
 	for id := range lights {
-		if _, ok := lightToggles[id]; !ok {
-			lightToggles[id] = new(widget.Clickable)
+		if _, ok := lightSliders[id]; !ok {
+			lightSliders[id] = new(widget.Float)
 		}
 	}
 
@@ -76,7 +89,6 @@ func run(w *app.Window) error {
 }
 
 func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights map[string]api.LightV1) layout.Dimensions {
-	// 1) Build a deterministic order
 	type row struct{ id, name string }
 	rows := make([]row, 0, len(lights))
 	for id, l := range lights {
@@ -93,37 +105,60 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 			children := make([]layout.FlexChild, 0, len(rows))
 			for _, r := range rows {
 				id := r.id
-				light := lights[id] // snapshot
+				light := lights[id]
 
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					btn := material.Button(th, lightToggles[id], light.Name)
-					if light.State.On {
-						btn.Background = color.NRGBA{R: 80, G: 200, B: 100, A: 255}
-					} else {
-						btn.Background = color.NRGBA{R: 180, G: 180, B: 180, A: 255}
+					slider := lightSliders[id]
+					if !sliderInit[id] {
+						if light.State.On && light.State.Bri > 0 {
+							slider.Value = float32(light.State.Bri-1) / 253.0
+						} else {
+							slider.Value = 0
+						}
+						sliderInit[id] = true
 					}
 
-					// 2) Use your SetLightState on click
-					for lightToggles[id].Clicked(gtx) {
-						newOn := !light.State.On
+					briDisplay := 0
+					if slider.Value > 0 {
+						briDisplay = int(math.Round(float64(slider.Value)*253.0)) + 1
+					}
+					nameW := gtx.Dp(unit.Dp(140))
+					dims := layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx C) D {
+							gtx.Constraints.Min.X = nameW
+							gtx.Constraints.Max.X = nameW
+							return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+								material.Body1(th, light.Name).Layout,
+							)
+						}),
+						layout.Flexed(1, material.Slider(th, slider).Layout),
+						layout.Rigid(func(gtx C) D {
+							return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+								material.Body1(th, fmt.Sprintf("%d", briDisplay)).Layout,
+							)
+						}),
+					)
 
-						// pick a sensible brightness when turning on
+					if slider.Dragging() {
+						newOn := slider.Value > 0
 						bri := light.State.Bri
-						if bri <= 0 {
-							bri = 254 // Hue v1 valid range is 1..254
+						if newOn {
+							bri = int(math.Round(float64(slider.Value)*253.0)) + 1
+						} else if bri <= 0 {
+							bri = 1
 						}
-
 						if err := api.SetLightState(br, id, newOn, bri); err != nil {
-							fmt.Println("toggle failed:", err)
-							// do NOT mutate local state on failure
+							fmt.Println("slider update failed:", err)
 						} else {
-							// reflect new state locally so UI updates immediately
 							light.State.On = newOn
+							if newOn {
+								light.State.Bri = bri
+							}
 							lights[id] = light
 						}
 					}
 
-					return btn.Layout(gtx)
+					return dims
 				}))
 			}
 			return children
