@@ -5,12 +5,14 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"huego/internal/api"
 	"huego/internal/bridge"
 	"huego/internal/config"
+	"image/color"
 	"log"
 	"math"
 	"os"
@@ -20,9 +22,11 @@ import (
 var (
 	lightSliders = map[string]*widget.Float{}
 	sliderInit   = map[string]bool{}
-	title        = "Huegio"
+	title        = "Huego"
 	MAX_WIDTH    = unit.Dp(400)
 	MAX_HEIGHT   = unit.Dp(300)
+	bg           = color.NRGBA{R: 18, G: 18, B: 22, A: 255}
+	lav          = color.NRGBA{R: 0xD3, G: 0xD3, B: 0xFF, A: 0xFF}
 )
 
 type (
@@ -35,6 +39,7 @@ func main() {
 		w := new(app.Window)
 		w.Option(app.Title(title))
 		w.Option(app.Size(MAX_WIDTH, MAX_HEIGHT))
+		startTray(w)
 		if err := run(w); err != nil {
 			log.Fatal(err)
 		}
@@ -46,6 +51,12 @@ func main() {
 func run(w *app.Window) error {
 	var ops op.Ops
 	theme := material.NewTheme()
+	theme.Palette = material.Palette{
+		Bg:         bg,
+		Fg:         lav,
+		ContrastBg: lav,
+		ContrastFg: bg,
+	}
 
 	cfg, err := config.LoadConfig()
 	if err != nil || cfg.Username == "" {
@@ -82,7 +93,15 @@ func run(w *app.Window) error {
 			return e.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
-			layoutList(gtx, theme, br, lights)
+			layout.Stack{}.Layout(gtx,
+				layout.Expanded(func(gtx C) D {
+					paint.Fill(gtx.Ops, bg)
+					return layout.Dimensions{Size: gtx.Constraints.Max}
+				}),
+				layout.Stacked(func(gtx C) D {
+					return layoutList(gtx, theme, br, lights)
+				}),
+			)
 			e.Frame(gtx.Ops)
 		}
 	}
