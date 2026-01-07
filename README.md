@@ -14,3 +14,7 @@ go init
 go build .
 go run .
 ```
+
+To use the app you must be connected to the same WiFi as your hue bridge.
+Upon first application start the user is asked to press the hue bridge
+connect button to authenticate to the app and fetch all of the lights.
