@@ -141,3 +141,62 @@ func GetRGBtoXY(c color.Color) [2]float64 {
 
 	return [2]float64{x, y}
 }
+
+func XYToRGB(xy [2]float64, yLuma float64) color.NRGBA {
+	x := xy[0]
+	y := xy[1]
+	if y == 0 {
+		return color.NRGBA{A: 255}
+	}
+
+	// Reconstruct XYZ
+	X := (x / y) * yLuma
+	Y := yLuma
+	Z := ((1 - x - y) / y) * yLuma
+
+	// Inverse matrix (Hue wide-gamut)
+	r := 1.612*X - 0.203*Y - 0.302*Z
+	g := -0.509*X + 1.412*Y + 0.066*Z
+	b := 0.026*X - 0.072*Y + 0.962*Z
+
+	// Clamp negatives
+	if r < 0 {
+		r = 0
+	}
+	if g < 0 {
+		g = 0
+	}
+	if b < 0 {
+		b = 0
+	}
+
+	// Gamma correction
+	r = gammaEncode(r)
+	g = gammaEncode(g)
+	b = gammaEncode(b)
+
+	// Clamp to [0,1]
+	if r > 1 {
+		r = 1
+	}
+	if g > 1 {
+		g = 1
+	}
+	if b > 1 {
+		b = 1
+	}
+
+	return color.NRGBA{
+		R: uint8(r*255 + 0.5),
+		G: uint8(g*255 + 0.5),
+		B: uint8(b*255 + 0.5),
+		A: 255,
+	}
+}
+
+func gammaEncode(v float64) float64 {
+	if v <= 0.0031308 {
+		return 12.92 * v
+	}
+	return 1.055*math.Pow(v, 1.0/2.4) - 0.055
+}

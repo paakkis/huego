@@ -30,6 +30,7 @@ var (
 	lightPickerStates  = map[string]*colorpicker.State{}
 	lightPickerButtons = map[string]*widget.Clickable{}
 	lightPickerOpen    = map[string]bool{}
+	lightsList         widget.List
 	sliderInit         = map[string]bool{}
 	title              = "Huego"
 	MAX_WIDTH          = unit.Dp(400)
@@ -69,6 +70,11 @@ func run(w *app.Window) error {
 		ContrastFg: bg,
 	}
 	theme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
+	if lightsList.Axis == 0 {
+		lightsList.Axis = layout.Vertical
+	}
+	theme.Face = "Go Mono"
+	theme.FingerSize = 1
 	ic, err := widget.NewIcon(icons.ImageColorLens)
 	if err != nil {
 		log.Fatal(err)
@@ -148,111 +154,114 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		func() []layout.FlexChild {
-			children := make([]layout.FlexChild, 0, len(rows))
-			for _, r := range rows {
-				id := r.id
-				light := lights[id]
+	list := material.List(th, &lightsList)
+	return list.Layout(gtx, len(rows), func(gtx layout.Context, index int) layout.Dimensions {
+		id := rows[index].id
+		light := lights[id]
 
-				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					slider := lightSliders[id]
-					if !sliderInit[id] {
-						if light.State.On && light.State.Bri > 0 {
-							slider.Value = float32(light.State.Bri-1) / 253.0
-						} else {
-							slider.Value = 0
-						}
-						sliderInit[id] = true
-					}
-
-					briDisplay := 0
-					if slider.Value > 0 {
-						briDisplay = int(math.Round(float64(light.State.Bri-1) / 253.0 * 100.0))
-					}
-					nameW := gtx.Dp(unit.Dp(140))
-					block := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-						layout.Rigid(func(gtx C) D {
-							return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-								layout.Rigid(func(gtx C) D {
-									gtx.Constraints.Min.X = nameW
-									gtx.Constraints.Max.X = nameW
-									return layout.UniformInset(unit.Dp(8)).Layout(gtx,
-										material.Body1(th, light.Name).Layout,
-									)
-								}),
-								layout.Flexed(1, material.Slider(th, slider).Layout),
-								layout.Rigid(func(gtx C) D {
-									return layout.UniformInset(unit.Dp(8)).Layout(gtx,
-										material.Body1(th, fmt.Sprintf("%d", briDisplay)).Layout,
-									)
-								}),
-								layout.Rigid(func(gtx C) D {
-									if !supportsXY(light) {
-										return D{}
-									}
-									btn := lightPickerButtons[id]
-									if btn.Clicked(gtx) {
-										lightPickerOpen[id] = !lightPickerOpen[id]
-									}
-									return layout.UniformInset(unit.Dp(6)).Layout(gtx,
-										material.IconButton(th, btn, icon, "Color").Layout,
-									)
-								}),
-							)
-						}),
-						layout.Rigid(func(gtx C) D {
-							if !supportsXY(light) || !lightPickerOpen[id] {
-								return D{}
-							}
-							state := lightPickerStates[id]
-							return layout.UniformInset(unit.Dp(6)).Layout(gtx, func(gtx C) D {
-								return layout.W.Layout(gtx, func(gtx C) D {
-									gtx.Constraints.Max.X = gtx.Dp(unit.Dp(260))
-									return colorpicker.PickerStyle{
-										Label:         "Current",
-										Theme:         th,
-										State:         state,
-										MonospaceFace: "Go Mono",
-									}.Layout(gtx)
-								})
-							})
-						}),
-					)
-					if slider.Dragging() {
-						newOn := slider.Value > 0
-						bri := light.State.Bri
-						if newOn {
-							bri = int(math.Round(float64(slider.Value)*253.0)) + 1
-						} else if bri <= 0 {
-							bri = 1
-						}
-						if err := api.SetLightState(br, id, newOn, bri, light.State.XY); err != nil {
-							fmt.Println("slider update failed:", err)
-						} else {
-							light.State.On = newOn
-							if newOn {
-								light.State.Bri = bri
-							}
-							lights[id] = light
-						}
-					}
-					if supportsXY(light) && lightPickerOpen[id] {
-						color := lightPickerStates[id].Color()
-						xy := api.GetRGBtoXY(color)
-						if err := api.SetLightState(br, id, light.State.On, light.State.Bri, xy); err != nil {
-							fmt.Println("color update failed:", err)
-						} else {
-							light.State.XY = xy
-							lights[id] = light
-						}
-					}
-					return block
-				}))
+		slider := lightSliders[id]
+		if !sliderInit[id] {
+			if light.State.On && light.State.Bri > 0 {
+				slider.Value = float32(light.State.Bri-1) / 253.0
+			} else {
+				slider.Value = 0
 			}
-			return children
-		}()...,
-	)
+			sliderInit[id] = true
+		}
+
+		briDisplay := 0
+		if slider.Value > 0 {
+			briDisplay = int(math.Round(float64(light.State.Bri-1) / 253.0 * 100.0))
+		}
+		nameW := gtx.Dp(unit.Dp(140))
+		block := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx C) D {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx C) D {
+						gtx.Constraints.Min.X = nameW
+						gtx.Constraints.Max.X = nameW
+						return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+							material.Body1(th, light.Name).Layout,
+						)
+					}),
+					layout.Flexed(1, material.Slider(th, slider).Layout),
+					layout.Rigid(func(gtx C) D {
+						return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+							material.Body1(th, fmt.Sprintf("%d", briDisplay)).Layout,
+						)
+					}),
+					layout.Rigid(func(gtx C) D {
+						if !supportsXY(light) {
+							return D{}
+						}
+						btn := lightPickerButtons[id]
+						if btn.Clicked(gtx) {
+							lightPickerOpen[id] = !lightPickerOpen[id]
+							if lightPickerOpen[id] {
+								state := lightPickerStates[id]
+								if light.State.XY != [2]float64{} {
+									yLuma := float64(light.State.Bri) / 254.0
+									if !light.State.On {
+										yLuma = 0
+									}
+									state.SetColor(api.XYToRGB(light.State.XY, yLuma))
+								}
+							}
+						}
+						return layout.UniformInset(unit.Dp(6)).Layout(gtx,
+							material.IconButton(th, btn, icon, "Color").Layout,
+						)
+					}),
+				)
+			}),
+			layout.Rigid(func(gtx C) D {
+				if !supportsXY(light) || !lightPickerOpen[id] {
+					return D{}
+				}
+				state := lightPickerStates[id]
+				return layout.UniformInset(unit.Dp(6)).Layout(gtx, func(gtx C) D {
+					return layout.W.Layout(gtx, func(gtx C) D {
+						gtx.Constraints.Max.X = gtx.Dp(unit.Dp(260))
+						return colorpicker.PickerStyle{
+							Label:         "Color",
+							Theme:         th,
+							State:         state,
+							MonospaceFace: "Go Mono",
+						}.Layout(gtx)
+					})
+				})
+			}),
+		)
+		if slider.Dragging() {
+			newOn := slider.Value > 0
+			bri := light.State.Bri
+			if newOn {
+				bri = int(math.Round(float64(slider.Value)*253.0)) + 1
+			} else if bri <= 0 {
+				bri = 1
+			}
+			if err := api.SetLightState(br, id, newOn, bri, light.State.XY); err != nil {
+				fmt.Println("slider update failed:", err)
+			} else {
+				light.State.On = newOn
+				if newOn {
+					light.State.Bri = bri
+				}
+				lights[id] = light
+			}
+		}
+		if supportsXY(light) && lightPickerOpen[id] {
+			color := lightPickerStates[id].Color()
+			xy := api.GetRGBtoXY(color)
+			if err := api.SetLightState(br, id, light.State.On, light.State.Bri, xy); err != nil {
+				fmt.Println("color update failed:", err)
+			} else {
+				light.State.XY = xy
+				lights[id] = light
+			}
+		}
+		return block
+	})
 }
 
 func supportsXY(light api.LightV1) bool {
