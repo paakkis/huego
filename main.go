@@ -34,7 +34,7 @@ var (
 	sliderInit         = map[string]bool{}
 	title              = "Huego"
 	MAX_WIDTH          = unit.Dp(400)
-	MAX_HEIGHT         = unit.Dp(425)
+	MAX_HEIGHT         = unit.Dp(400)
 	bg                 = color.NRGBA{R: 18, G: 18, B: 22, A: 255}
 	lav                = color.NRGBA{R: 0xD3, G: 0xD3, B: 0xFF, A: 0xFF}
 	white              = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
@@ -75,6 +75,7 @@ func run(w *app.Window) error {
 	}
 	theme.Face = "Go Mono"
 	theme.FingerSize = 1
+	theme.TextSize = 13
 	ic, err := widget.NewIcon(icons.ImageColorLens)
 	if err != nil {
 		log.Fatal(err)
@@ -180,9 +181,12 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 					layout.Rigid(func(gtx C) D {
 						gtx.Constraints.Min.X = nameW
 						gtx.Constraints.Max.X = nameW
-						return layout.UniformInset(unit.Dp(8)).Layout(gtx,
-							material.Body1(th, light.Name).Layout,
-						)
+						return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx C) D {
+							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+								layout.Rigid(material.Body1(th, light.Name).Layout),
+								layout.Rigid(material.Body2(th, "("+light.ProductName+")").Layout),
+							)
+						})
 					}),
 					layout.Flexed(1, material.Slider(th, slider).Layout),
 					layout.Rigid(func(gtx C) D {
@@ -208,9 +212,10 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 								}
 							}
 						}
-						return layout.UniformInset(unit.Dp(6)).Layout(gtx,
-							material.IconButton(th, btn, icon, "Color").Layout,
-						)
+						btnStyle := material.IconButton(th, btn, icon, "Color")
+						btnStyle.Size = unit.Dp(16)
+						btnStyle.Inset = layout.UniformInset(6)
+						return btnStyle.Layout(gtx)
 					}),
 				)
 			}),
