@@ -12,6 +12,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"gioui.org/x/colorpicker"
+	"golang.org/x/exp/shiny/materialdesign/icons"
 	"huego/internal/api"
 	"huego/internal/bridge"
 	"huego/internal/config"
@@ -31,10 +32,11 @@ var (
 	sliderInit         = map[string]bool{}
 	title              = "Huego"
 	MAX_WIDTH          = unit.Dp(400)
-	MAX_HEIGHT         = unit.Dp(650)
+	MAX_HEIGHT         = unit.Dp(425)
 	bg                 = color.NRGBA{R: 18, G: 18, B: 22, A: 255}
 	lav                = color.NRGBA{R: 0xD3, G: 0xD3, B: 0xFF, A: 0xFF}
 	white              = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+	icon               *widget.Icon
 )
 
 type (
@@ -66,6 +68,12 @@ func run(w *app.Window) error {
 		ContrastFg: bg,
 	}
 	theme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
+	ic, err := widget.NewIcon(icons.ImageColorLens)
+	if err != nil {
+		log.Fatal(err)
+	}
+	icon = ic
+
 	cfg, err := config.LoadConfig()
 
 	if err != nil || cfg.Username == "" {
@@ -162,35 +170,34 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 						briDisplay = int(math.Round(float64(slider.Value)*253.0)) + 1
 					}
 					nameW := gtx.Dp(unit.Dp(140))
-					dims := layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-						layout.Rigid(func(gtx C) D {
-							gtx.Constraints.Min.X = nameW
-							gtx.Constraints.Max.X = nameW
-							return layout.UniformInset(unit.Dp(8)).Layout(gtx,
-								material.Body1(th, light.Name).Layout,
-							)
-						}),
-						layout.Flexed(1, material.Slider(th, slider).Layout),
-						layout.Rigid(func(gtx C) D {
-							return layout.UniformInset(unit.Dp(8)).Layout(gtx,
-								material.Body1(th, fmt.Sprintf("%d", briDisplay)).Layout,
-							)
-						}),
-					)
 					block := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx C) D {
-							return dims
-						}),
-						layout.Rigid(func(gtx C) D {
-							if !supportsXY(light) {
-								return D{}
-							}
-							btn := lightPickerButtons[id]
-							if btn.Clicked(gtx) {
-								lightPickerOpen[id] = !lightPickerOpen[id]
-							}
-							return layout.UniformInset(unit.Dp(6)).Layout(gtx,
-								material.Button(th, btn, "Color").Layout,
+							return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+								layout.Rigid(func(gtx C) D {
+									gtx.Constraints.Min.X = nameW
+									gtx.Constraints.Max.X = nameW
+									return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+										material.Body1(th, light.Name).Layout,
+									)
+								}),
+								layout.Flexed(1, material.Slider(th, slider).Layout),
+								layout.Rigid(func(gtx C) D {
+									return layout.UniformInset(unit.Dp(8)).Layout(gtx,
+										material.Body1(th, fmt.Sprintf("%d", briDisplay)).Layout,
+									)
+								}),
+								layout.Rigid(func(gtx C) D {
+									if !supportsXY(light) {
+										return D{}
+									}
+									btn := lightPickerButtons[id]
+									if btn.Clicked(gtx) {
+										lightPickerOpen[id] = !lightPickerOpen[id]
+									}
+									return layout.UniformInset(unit.Dp(6)).Layout(gtx,
+										material.IconButton(th, btn, icon, "Color").Layout,
+									)
+								}),
 							)
 						}),
 						layout.Rigid(func(gtx C) D {
@@ -198,14 +205,17 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 								return D{}
 							}
 							state := lightPickerStates[id]
-							return layout.UniformInset(unit.Dp(6)).Layout(gtx,
-								colorpicker.PickerStyle{
-									Label:         "Color",
-									Theme:         th,
-									State:         state,
-									MonospaceFace: "Go Mono",
-								}.Layout,
-							)
+							return layout.UniformInset(unit.Dp(6)).Layout(gtx, func(gtx C) D {
+								return layout.W.Layout(gtx, func(gtx C) D {
+									gtx.Constraints.Max.X = gtx.Dp(unit.Dp(260))
+									return colorpicker.PickerStyle{
+										Label:         "Current",
+										Theme:         th,
+										State:         state,
+										MonospaceFace: "Go Mono",
+									}.Layout(gtx)
+								})
+							})
 						}),
 					)
 					if slider.Dragging() {
