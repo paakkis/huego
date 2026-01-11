@@ -20,8 +20,8 @@ type AuthSuccess struct {
 }
 
 type AuthResponse struct {
-	Success *AuthSuccess           `json:"success,omitempty"`
-	Error   map[string]interface{} `json:"error,omitempty"`
+	Success *AuthSuccess   `json:"success,omitempty"`
+	Error   map[string]any `json:"error,omitempty"`
 }
 
 func Authenticate(bridgeIP string) (*AuthSuccess, error) {

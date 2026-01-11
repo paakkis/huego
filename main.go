@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 	"gioui.org/app"
+	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"gioui.org/x/colorpicker"
 	"huego/internal/api"
 	"huego/internal/bridge"
 	"huego/internal/config"
@@ -17,16 +20,21 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 )
 
 var (
-	lightSliders = map[string]*widget.Float{}
-	sliderInit   = map[string]bool{}
-	title        = "Huego"
-	MAX_WIDTH    = unit.Dp(400)
-	MAX_HEIGHT   = unit.Dp(300)
-	bg           = color.NRGBA{R: 18, G: 18, B: 22, A: 255}
-	lav          = color.NRGBA{R: 0xD3, G: 0xD3, B: 0xFF, A: 0xFF}
+	lightSliders       = map[string]*widget.Float{}
+	lightPickerStates  = map[string]*colorpicker.State{}
+	lightPickerButtons = map[string]*widget.Clickable{}
+	lightPickerOpen    = map[string]bool{}
+	sliderInit         = map[string]bool{}
+	title              = "Huego"
+	MAX_WIDTH          = unit.Dp(400)
+	MAX_HEIGHT         = unit.Dp(650)
+	bg                 = color.NRGBA{R: 18, G: 18, B: 22, A: 255}
+	lav                = color.NRGBA{R: 0xD3, G: 0xD3, B: 0xFF, A: 0xFF}
+	white              = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
 )
 
 type (
@@ -57,8 +65,9 @@ func run(w *app.Window) error {
 		ContrastBg: lav,
 		ContrastFg: bg,
 	}
-
+	theme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 	cfg, err := config.LoadConfig()
+
 	if err != nil || cfg.Username == "" {
 		// Discover + authenticate on first run
 		bridges, err := bridge.DiscoverBridges()
@@ -77,6 +86,7 @@ func run(w *app.Window) error {
 
 	br := api.Bridge{IP: cfg.BridgeIP, Username: cfg.Username}
 	lights, err := api.GetLights(br)
+
 	if err != nil {
 		return err
 	}
@@ -85,14 +95,22 @@ func run(w *app.Window) error {
 		if _, ok := lightSliders[id]; !ok {
 			lightSliders[id] = new(widget.Float)
 		}
+		if _, ok := lightPickerStates[id]; !ok {
+			state := new(colorpicker.State)
+			state.SetColor(white)
+			lightPickerStates[id] = state
+		}
+		if _, ok := lightPickerButtons[id]; !ok {
+			lightPickerButtons[id] = new(widget.Clickable)
+		}
 	}
-
 	for {
 		switch e := w.Event().(type) {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
+
 			layout.Stack{}.Layout(gtx,
 				layout.Expanded(func(gtx C) D {
 					paint.Fill(gtx.Ops, bg)
@@ -110,6 +128,7 @@ func run(w *app.Window) error {
 func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights map[string]api.LightV1) layout.Dimensions {
 	type row struct{ id, name string }
 	rows := make([]row, 0, len(lights))
+
 	for id, l := range lights {
 		name := l.Name
 		if name == "" {
@@ -117,6 +136,7 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 		}
 		rows = append(rows, row{id: id, name: name})
 	}
+
 	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -157,7 +177,37 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 							)
 						}),
 					)
-
+					block := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(func(gtx C) D {
+							return dims
+						}),
+						layout.Rigid(func(gtx C) D {
+							if !supportsXY(light) {
+								return D{}
+							}
+							btn := lightPickerButtons[id]
+							if btn.Clicked(gtx) {
+								lightPickerOpen[id] = !lightPickerOpen[id]
+							}
+							return layout.UniformInset(unit.Dp(6)).Layout(gtx,
+								material.Button(th, btn, "Color").Layout,
+							)
+						}),
+						layout.Rigid(func(gtx C) D {
+							if !supportsXY(light) || !lightPickerOpen[id] {
+								return D{}
+							}
+							state := lightPickerStates[id]
+							return layout.UniformInset(unit.Dp(6)).Layout(gtx,
+								colorpicker.PickerStyle{
+									Label:         "Color",
+									Theme:         th,
+									State:         state,
+									MonospaceFace: "Go Mono",
+								}.Layout,
+							)
+						}),
+					)
 					if slider.Dragging() {
 						newOn := slider.Value > 0
 						bri := light.State.Bri
@@ -166,7 +216,7 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 						} else if bri <= 0 {
 							bri = 1
 						}
-						if err := api.SetLightState(br, id, newOn, bri); err != nil {
+						if err := api.SetLightState(br, id, newOn, bri, light.State.XY); err != nil {
 							fmt.Println("slider update failed:", err)
 						} else {
 							light.State.On = newOn
@@ -176,14 +226,31 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 							lights[id] = light
 						}
 					}
-
-					return dims
+					if supportsXY(light) && lightPickerOpen[id] {
+						color := lightPickerStates[id].Color()
+						xy := api.GetRGBtoXY(color)
+						if err := api.SetLightState(br, id, light.State.On, light.State.Bri, xy); err != nil {
+							fmt.Println("color update failed:", err)
+						} else {
+							light.State.XY = xy
+							lights[id] = light
+						}
+					}
+					return block
 				}))
 			}
 			return children
 		}()...,
 	)
 }
+
+func supportsXY(light api.LightV1) bool {
+	if light.State.XY != [2]float64{} {
+		return true
+	}
+	return strings.Contains(strings.ToLower(light.Type), "color")
+}
+
 func errOr(msg string, err error) error {
 	if err != nil {
 		return err
