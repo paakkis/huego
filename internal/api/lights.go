@@ -42,10 +42,6 @@ type LightV1 struct {
 	ProductName string `json:"productname"`
 }
 
-type resourceResponse struct {
-	Data []Light `json:"data"`
-}
-
 // Get all lights from the bridge
 func GetLights(bridge Bridge) (map[string]LightV1, error) {
 	url := fmt.Sprintf("http://%s/api/%s/lights", bridge.IP, bridge.Username)
@@ -64,19 +60,6 @@ func GetLights(bridge Bridge) (map[string]LightV1, error) {
 	var lights map[string]LightV1
 	err = json.Unmarshal(body, &lights)
 	return lights, err
-}
-
-type LightState struct {
-	On      *OnState      `json:"on,omitempty"`
-	Dimming *DimmingState `json:"dimming,omitempty"`
-}
-
-type OnState struct {
-	On bool `json:"on"`
-}
-
-type DimmingState struct {
-	Brightness float64 `json:"brightness"` // range 1.0–100.0
 }
 
 func SetLightState(bridge Bridge, lightID string, on bool, bri int, xy [2]float64) error {

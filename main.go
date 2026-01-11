@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"gioui.org/app"
 	"gioui.org/font/gofont"
@@ -167,7 +168,7 @@ func layoutList(gtx layout.Context, th *material.Theme, br api.Bridge, lights ma
 
 					briDisplay := 0
 					if slider.Value > 0 {
-						briDisplay = int(math.Round(float64(slider.Value)*253.0)) + 1
+						briDisplay = int(math.Round(float64(light.State.Bri-1) / 253.0 * 100.0))
 					}
 					nameW := gtx.Dp(unit.Dp(140))
 					block := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -265,5 +266,5 @@ func errOr(msg string, err error) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf(msg)
+	return errors.New(msg)
 }
